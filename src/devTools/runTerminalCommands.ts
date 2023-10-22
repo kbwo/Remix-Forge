@@ -3,8 +3,9 @@ import { getWorkspacePath } from "../utils/vscode";
 import { WebSocket, WebSocketServer } from "ws";
 import { killtree } from "./killProcess";
 /** Make this work properly with the remix dev tools so it executes, closes and runs processes */
-const executeCommand = (command: string, socket: WebSocket, terminalId: number, wss: WebSocketServer) => {
-  const process = exec(command, { cwd: getWorkspacePath(), env: { FORCE_COLOR: "true" } });
+const executeCommand = async (command: string, socket: WebSocket, terminalId: number, wss: WebSocketServer) => {
+  const workspacePath = await getWorkspacePath();
+  const process = exec(command, { cwd: workspacePath, env: { FORCE_COLOR: "true" } });
 
   process.on("spawn", () => {
     socket.send(
@@ -58,5 +59,5 @@ export const runTerminalCommands = async (
   terminalId: number,
   wss: WebSocketServer
 ) => {
-  executeCommand(command, socket, terminalId, wss);
+  await executeCommand(command, socket, terminalId, wss);
 };

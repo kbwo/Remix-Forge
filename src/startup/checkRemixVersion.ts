@@ -26,7 +26,8 @@ export const checkRemixVersion = async () => {
   }
 
   const promise = new Promise<string | undefined>(async (resolve) => {
-    exec(`npm view @remix-run/react version`, { cwd: getWorkspacePath() }, (error, stdout, stderr) => {
+    const workspacePath = await getWorkspacePath();
+    exec(`npm view @remix-run/react version`, { cwd: workspacePath }, (error, stdout, stderr) => {
       if (error) {
         return resolve(undefined);
       }
