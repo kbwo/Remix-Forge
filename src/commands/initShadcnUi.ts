@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
 import {
-  commandWithLoading,
   getPickableOptions,
   getUserInput,
+  getWorkspacePath,
   installDependencies,
   joinPath,
   runCommandWithPrompt,
@@ -22,7 +22,11 @@ const moveUtils = async (rootDir: vscode.Uri, libLocation: string) => {
   if (!newLoc) {
     await vscode.workspace.fs.createDirectory(joinPath(rootDir, sanitizePath(libLocation)));
   }
-  await vscode.workspace.fs.rename(oldLocation, newLocation);
+  try {
+    await vscode.workspace.fs.rename(oldLocation, newLocation);
+  } catch (e) {
+    return;
+  }
   try {
     await vscode.workspace.fs.delete(vscode.Uri.joinPath(rootDir, "@"));
   } catch (err) {
@@ -82,7 +86,7 @@ const updateRoot = async (rootDir: vscode.Uri, cssName: string, runtimeDependenc
 
       await vscode.workspace.fs.writeFile(rootPath, Buffer.from(rootContent));
     }
-  } catch (error) {}
+  } catch (error) { }
 };
 
 const updateTsconfig = async (rootDir: vscode.Uri, libLocation: string) => {
@@ -124,11 +128,15 @@ const updateTsconfig = async (rootDir: vscode.Uri, libLocation: string) => {
         await vscode.workspace.fs.writeFile(tsconfigPath, Buffer.from(tsConfigString));
       }
     }
-  } catch (error) {}
+  } catch (error) { }
 };
 
 export const initShadcnUi = async (uri: vscode.Uri) => {
-  const rootDir = getRootDir();
+  const workspacePath = await getWorkspacePath();
+  if(!workspacePath) {
+    return;
+  }
+  const rootDir = vscode.Uri.file(workspacePath);
   if (!rootDir) {
     return;
   }
@@ -157,15 +165,11 @@ export const initShadcnUi = async (uri: vscode.Uri) => {
     title: "Initializing shadcn/ui",
     promptHandler: async (process, resolve) => {
       process.stdout?.on("data", (data) => {
-        if (data.toString().includes("Which style would you like to use?") && commands[0].runTimes > 0) {
-          while (commands[0].runTimes > 0) {
-            process.stdin?.write(commands[0].command);
-            commands[0].runTimes = commands[0].runTimes - 1;
-          }
-          process.stdin?.write("\x0D");
+        if(data.toString().includes("Would you like to use TypeScript (recommended)?") && commands[0].runTimes > 0) {
+          process.stdin?.write(commands[0].command);
+          commands[0].runTimes = commands[0].runTimes - 1;
         }
-
-        if (data.toString().includes("Which color would you like to use as base color?") && commands[1].runTimes > 0) {
+        if (data.toString().includes("Which style would you like to use?") && commands[1].runTimes > 0) {
           while (commands[1].runTimes > 0) {
             process.stdin?.write(commands[1].command);
             commands[1].runTimes = commands[1].runTimes - 1;
@@ -173,33 +177,41 @@ export const initShadcnUi = async (uri: vscode.Uri) => {
           process.stdin?.write("\x0D");
         }
 
-        if (data.toString().includes("Where is your global CSS file?") && commands[2].runTimes > 0) {
-          process.stdin?.write(commands[2].command);
-          commands[2].runTimes = commands[2].runTimes - 1;
+        if (data.toString().includes("Which color would you like to use as base color?") && commands[2].runTimes > 0) {
+          while (commands[2].runTimes > 0) {
+            process.stdin?.write(commands[2].command);
+            commands[2].runTimes = commands[2].runTimes - 1;
+          }
+          process.stdin?.write("\x0D");
         }
-        if (data.toString().includes("Do you want to use CSS variables for colors?") && commands[3].runTimes > 0) {
+
+        if (data.toString().includes("Where is your global CSS file?") && commands[3].runTimes > 0) {
           process.stdin?.write(commands[3].command);
           commands[3].runTimes = commands[3].runTimes - 1;
         }
-        if (data.toString().includes("Where is your tailwind.config.js located?") && commands[4].runTimes > 0) {
+        if (data.toString().includes("Would you like to use CSS variables for colors?") && commands[4].runTimes > 0) {
           process.stdin?.write(commands[4].command);
           commands[4].runTimes = commands[4].runTimes - 1;
         }
-        if (data.toString().includes("Configure the import alias for components:") && commands[5].runTimes > 0) {
+        if (data.toString().includes("Where is your tailwind.config.js located?") && commands[5].runTimes > 0) {
           process.stdin?.write(commands[5].command);
           commands[5].runTimes = commands[5].runTimes - 1;
         }
-        if (data.toString().includes("Configure the import alias for utils:") && commands[6].runTimes > 0) {
+        if (data.toString().includes("Configure the import alias for components:") && commands[6].runTimes > 0) {
           process.stdin?.write(commands[6].command);
           commands[6].runTimes = commands[6].runTimes - 1;
         }
-        if (data.toString().includes("Are you using React Server Components?") && commands[7].runTimes > 0) {
+        if (data.toString().includes("Configure the import alias for utils:") && commands[7].runTimes > 0) {
           process.stdin?.write(commands[7].command);
           commands[7].runTimes = commands[7].runTimes - 1;
         }
-        if (data.toString().includes("Write configuration to components.json") && commands[8].runTimes > 0) {
+        if (data.toString().includes("Are you using React Server Components?") && commands[8].runTimes > 0) {
           process.stdin?.write(commands[8].command);
           commands[8].runTimes = commands[8].runTimes - 1;
+        }
+        if (data.toString().includes("Write configuration to components.json") && commands[9].runTimes > 0) {
+          process.stdin?.write(commands[9].command);
+          commands[9].runTimes = commands[9].runTimes - 1;
           process.stdin?.end();
         }
       });
@@ -224,6 +236,14 @@ export const initShadcnUi = async (uri: vscode.Uri) => {
 const generateCLICommands = async (cssName: string) => {
   const commands: { command: string; runTimes: number }[] = [];
 
+  const useTS = await getPickableOptions(
+    [
+      { picked: true, value: 1, description: "Will use TypeScript", label: "Yes" },
+      { value: 0, description: "Will not use TypeScript", label: "No" },
+    ],
+    { title: "Would you like to use TypeSCript?" }
+  );
+
   const stylePick = await getPickableOptions(
     [
       { picked: true, label: "Default", value: 0 },
@@ -247,12 +267,14 @@ const generateCLICommands = async (cssName: string) => {
       { picked: true, label: "No", description: "Will not use CSS variables for colors", value: 0 },
       { value: 1, description: "Will use CSS variables for colors", label: "Yes" },
     ],
-    { title: "Do you want to use CSS variables for colors?" }
+    { title: "Would you like to use CSS variables for colors?" }
   );
 
-  if (!stylePick || !colorPick || !cssVars) {
+  if (!useTS || !stylePick || !colorPick || !cssVars) {
     return commands;
   }
+  commands.push({ command: "\x0D", runTimes: 1 });
+  commands.push({ command: `${useTS.value === 0 ? "" : "\x1B[C"}\x0D`, runTimes: 1 });
   commands.push({ command: `\x1B[B`, runTimes: stylePick.value > 0 ? stylePick.value : 1 });
 
   commands.push({ command: `\x1B[B`, runTimes: colorPick.value > 0 ? colorPick.value : 1 });
