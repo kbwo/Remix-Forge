@@ -1,11 +1,11 @@
 import { exec } from "child_process";
-import { getWorkspacePath } from "../utils/vscode";
 import { WebSocket, WebSocketServer } from "ws";
 import { killtree } from "./killProcess";
+import { getRootDir } from "../utils/file";
 /** Make this work properly with the remix dev tools so it executes, closes and runs processes */
 const executeCommand = async (command: string, socket: WebSocket, terminalId: number, wss: WebSocketServer) => {
-  const workspacePath = await getWorkspacePath();
-  const process = exec(command, { cwd: workspacePath, env: { FORCE_COLOR: "true" } });
+  const workspacePath = await getRootDir();
+  const process = exec(command, { cwd: workspacePath?.fsPath, env: { FORCE_COLOR: "true" } });
 
   process.on("spawn", () => {
     socket.send(
@@ -13,7 +13,7 @@ const executeCommand = async (command: string, socket: WebSocket, terminalId: nu
         type: "terminal_command",
         terminalId,
         processId: process.pid,
-      })
+      }),
     );
   });
   process.on("error", (error) => {
@@ -26,7 +26,7 @@ const executeCommand = async (command: string, socket: WebSocket, terminalId: nu
         subtype: "DATA",
         terminalId,
         data: data.toString(),
-      })
+      }),
     );
   });
 
@@ -57,7 +57,7 @@ export const runTerminalCommands = async (
   socket: WebSocket,
   command: string,
   terminalId: number,
-  wss: WebSocketServer
+  wss: WebSocketServer,
 ) => {
   await executeCommand(command, socket, terminalId, wss);
 };

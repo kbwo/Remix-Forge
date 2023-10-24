@@ -2,14 +2,13 @@ import * as vscode from "vscode";
 import {
   getPickableOptions,
   getUserInput,
-  getWorkspacePath,
   installDependencies,
   joinPath,
   runCommandWithPrompt,
   sanitizePath,
   writeToFile,
 } from "../utils/vscode";
-import { getRootDir, tryReadFile } from "../utils/file";
+import { getDirFromFileUri, tryReadFile } from "../utils/file";
 import { getConfig } from "../config";
 
 const moveUtils = async (rootDir: vscode.Uri, libLocation: string) => {
@@ -31,7 +30,7 @@ const moveUtils = async (rootDir: vscode.Uri, libLocation: string) => {
     await vscode.workspace.fs.delete(vscode.Uri.joinPath(rootDir, "@"));
   } catch (err) {
     vscode.window.showErrorMessage(
-      "Failed to delete lib folder on the root due to the extension not having the required permissions to remove the directory. Please delete it manually."
+      "Failed to delete lib folder on the root due to the extension not having the required permissions to remove the directory. Please delete it manually.",
     );
   }
 };
@@ -71,7 +70,7 @@ const updateRoot = async (rootDir: vscode.Uri, cssName: string, runtimeDependenc
               "];",
               "",
               "export default",
-            ].join("\n")
+            ].join("\n"),
           );
       }
       if (
@@ -80,13 +79,15 @@ const updateRoot = async (rootDir: vscode.Uri, cssName: string, runtimeDependenc
       ) {
         rootContent = rootContent.replace(
           "export const links: LinksFunction = () => [",
-          ["export const links: LinksFunction = () => [", '  { rel: "stylesheet", href: styles },', "];", ""].join("\n")
+          ["export const links: LinksFunction = () => [", '  { rel: "stylesheet", href: styles },', "];", ""].join(
+            "\n",
+          ),
         );
       }
 
       await vscode.workspace.fs.writeFile(rootPath, Buffer.from(rootContent));
     }
-  } catch (error) { }
+  } catch (error) {}
 };
 
 const updateTsconfig = async (rootDir: vscode.Uri, libLocation: string) => {
@@ -115,31 +116,24 @@ const updateTsconfig = async (rootDir: vscode.Uri, libLocation: string) => {
         if (!tsConfigString.includes("@/*") && tsConfigString.includes("paths")) {
           tsConfigString = tsConfigString.replace(
             '"paths": {',
-            [`"paths": {`, `      "@/*": ["${alias}"],`].join("\n")
+            [`"paths": {`, `      "@/*": ["${alias}"],`].join("\n"),
           );
         }
         if (!tsConfigString.includes("paths")) {
           tsConfigString = tsConfigString.replace(
             '"compilerOptions": {',
-            [`"compilerOptions": {`, `    "paths": {`, `      "@/*": ["${alias}"]`, `    },`].join("\n")
+            [`"compilerOptions": {`, `    "paths": {`, `      "@/*": ["${alias}"]`, `    },`].join("\n"),
           );
         }
 
         await vscode.workspace.fs.writeFile(tsconfigPath, Buffer.from(tsConfigString));
       }
     }
-  } catch (error) { }
+  } catch (error) {}
 };
 
 export const initShadcnUi = async (uri: vscode.Uri) => {
-  const workspacePath = await getWorkspacePath();
-  if (!workspacePath) {
-    return;
-  }
-  const rootDir = vscode.Uri.file(workspacePath);
-  if (!rootDir) {
-    return;
-  }
+  const rootDir = getDirFromFileUri(uri);
   const initialized = await tryReadFile(joinPath(rootDir, "components.json"));
   if (initialized) {
     vscode.window.showErrorMessage("Shadcn UI is already initialized in this project.");
@@ -160,12 +154,12 @@ export const initShadcnUi = async (uri: vscode.Uri) => {
   if (!commands.length) {
     return;
   }
-        console.log('called')
   await runCommandWithPrompt({
     command: "npx shadcn-ui@latest init",
     title: "Initializing shadcn/ui",
     promptHandler: async (process, resolve) => {
       process.stdout?.on("data", (data) => {
+        console.log("data", data);
         if (data.toString().includes("Would you like to use TypeScript (recommended)?") && commands[0].runTimes > 0) {
           process.stdin?.write(commands[0].command);
           commands[0].runTimes = commands[0].runTimes - 1;
@@ -237,20 +231,12 @@ export const initShadcnUi = async (uri: vscode.Uri) => {
 const generateCLICommands = async (cssName: string) => {
   const commands: { command: string; runTimes: number }[] = [];
 
-  const useTS = await getPickableOptions(
-    [
-      { picked: true, value: 1, description: "Will use TypeScript", label: "Yes" },
-      { value: 0, description: "Will not use TypeScript", label: "No" },
-    ],
-    { title: "Would you like to use TypeSCript?" }
-  );
-
   const stylePick = await getPickableOptions(
     [
       { picked: true, label: "Default", value: 0 },
       { value: 1, label: "New York" },
     ],
-    { title: "Pick your style options" }
+    { title: "Pick your style options" },
   );
   const colorPick = await getPickableOptions(
     [
@@ -260,7 +246,7 @@ const generateCLICommands = async (cssName: string) => {
       { value: 3, label: "Neutral" },
       { value: 4, label: "Stone" },
     ],
-    { title: "Pick your template colors" }
+    { title: "Pick your template colors" },
   );
 
   const cssVars = await getPickableOptions(
@@ -268,14 +254,13 @@ const generateCLICommands = async (cssName: string) => {
       { picked: true, label: "No", description: "Will not use CSS variables for colors", value: 0 },
       { value: 1, description: "Will use CSS variables for colors", label: "Yes" },
     ],
-    { title: "Would you like to use CSS variables for colors?" }
+    { title: "Would you like to use CSS variables for colors?" },
   );
 
-  if (!useTS || !stylePick || !colorPick || !cssVars) {
+  if (!stylePick || !colorPick || !cssVars) {
     return commands;
   }
   commands.push({ command: "\x0D", runTimes: 1 });
-  commands.push({ command: `${useTS.value === 0 ? "" : "\x1B[C"}\x0D`, runTimes: 1 });
   commands.push({ command: `\x1B[B`, runTimes: stylePick.value > 0 ? stylePick.value : 1 });
 
   commands.push({ command: `\x1B[B`, runTimes: colorPick.value > 0 ? colorPick.value : 1 });

@@ -28,12 +28,12 @@ export const DB_SOURCE_OPTIONS: DB_SOURCE_OPTION[] = [
 
 export const generatePrisma = async (uri: vscode.Uri) => {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
-  if (!workspaceRoot) return;
+  if (!workspaceRoot) {return;}
 
   const prismaFolder = vscode.Uri.joinPath(workspaceRoot, "prisma");
   const option = await vscode.window.showQuickPick(DB_SOURCE_OPTIONS);
 
-  if (!option) return;
+  if (!option) {return;}
 
   await runCommand({
     title: "Initializing Prisma",

@@ -1,5 +1,6 @@
 import { ChildProcess, exec } from "child_process";
 import * as vscode from "vscode";
+import { getRootDir } from "./file";
 
 export const commandWithLoading = async (title: string, action: (...args: any[]) => Promise<void> | void) => {
   await vscode.window.withProgress(
@@ -27,77 +28,28 @@ export const commandWithLoading = async (title: string, action: (...args: any[])
 
       // Update notification when process is finished
       progress.report({ increment: 100, message: "" });
-    }
+    },
   );
-  vscode.window.showInformationMessage(`${title} finished!`).then(() => { });
+  vscode.window.showInformationMessage(`${title} finished!`).then(() => {});
   return;
 };
 
 export const getDirFromFileUri = (uri: vscode.Uri) => {
-  const path = uri.fsPath
-  return vscode.Uri.file(path.substring(0, path.lastIndexOf('/')))
-}
-
-export const fileExists = async (dir: vscode.Uri, filename: string) : Promise<boolean> => {
-  try {
-    await vscode.workspace.fs.stat(vscode.Uri.joinPath(dir, filename));
-    return true;
-  } catch (_e) {
-    return false;
-  }
-}
-
-async function directoryHasPackageJson(dir: vscode.Uri) {
-  try {
-    return await fileExists(dir, "package.json");
-  } catch (e) {
-    return false;
-  }
-}
-
-async function findNearestConfigDir(dir: vscode.Uri): Promise<vscode.Uri | undefined> {
-  const hasRemixConfig = await fileExists(dir, "remix.config.js");
-  if ((await directoryHasPackageJson(dir)) && hasRemixConfig) {
-    return dir;
-  }
-
-  const files = await vscode.workspace.fs.readDirectory(dir);
-  for (const file of files) {
-    const fileType = file[1];
-    if (fileType === vscode.FileType.Directory) {
-      const foundDir = await findNearestConfigDir(vscode.Uri.joinPath(dir, file[0]));
-      if (foundDir) {
-        return foundDir;
-      }
-    }
-  }
-}
-
-
-export const getWorkspacePath = async () => {
-  const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (!workspaceFolders || workspaceFolders.length === 0) {
-    return undefined; // No workspace folders found
-  }
-
-  let workspaceFolderPath = workspaceFolders[0].uri;
-  if (!(await directoryHasPackageJson(workspaceFolderPath))) {
-    workspaceFolderPath = (await findNearestConfigDir(workspaceFolderPath)) || workspaceFolderPath;
-  }
-  return workspaceFolderPath.fsPath;
+  const path = uri.fsPath;
+  return vscode.Uri.file(path.substring(0, path.lastIndexOf("/")));
 };
 
 export async function getPackageJson() {
-  const workspaceFolderPath = await getWorkspacePath();
-  if (!workspaceFolderPath) {
+  const rootDir = await getRootDir();
+  if (!rootDir) {
     return undefined;
   }
-  const packageJsonPath = vscode.Uri.joinPath(vscode.Uri.file(workspaceFolderPath), "package.json").fsPath;
+  const packageJsonPath = vscode.Uri.joinPath(vscode.Uri.file(rootDir.fsPath), "package.json").fsPath;
   const packageJson = await vscode.workspace.fs.readFile(vscode.Uri.file(packageJsonPath));
   let output = undefined;
   try {
     output = JSON.parse(packageJson.toString());
-  } catch (e) { }
+  } catch (e) {}
   return output;
 }
 
@@ -133,31 +85,31 @@ export async function getDevDependenciesArray() {
 }
 
 export const getPackageManager = async () => {
-  const workspaceFolderPath = await getWorkspacePath();
-  if (!workspaceFolderPath) {
+  const rootDir = await getRootDir();
+  if (!rootDir?.fsPath) {
     return undefined;
   }
-  const packageJsonPathNPM = vscode.Uri.joinPath(vscode.Uri.file(workspaceFolderPath), "package-lock.json").fsPath;
-  const packageJsonPathYarn = vscode.Uri.joinPath(vscode.Uri.file(workspaceFolderPath), "yarn.lock").fsPath;
-  const packageJsonPathPNPM = vscode.Uri.joinPath(vscode.Uri.file(workspaceFolderPath), "pnpm-lock.yaml").fsPath;
+  const packageJsonPathNPM = vscode.Uri.joinPath(vscode.Uri.file(rootDir?.fsPath), "package-lock.json").fsPath;
+  const packageJsonPathYarn = vscode.Uri.joinPath(vscode.Uri.file(rootDir?.fsPath), "yarn.lock").fsPath;
+  const packageJsonPathPNPM = vscode.Uri.joinPath(vscode.Uri.file(rootDir?.fsPath), "pnpm-lock.yaml").fsPath;
   try {
     const packageLockNPM = await vscode.workspace.fs.readFile(vscode.Uri.file(packageJsonPathNPM));
     if (packageLockNPM) {
       return "npm";
     }
-  } catch (e) { }
+  } catch (e) {}
   try {
     const packageLockYarn = await vscode.workspace.fs.readFile(vscode.Uri.file(packageJsonPathYarn));
     if (packageLockYarn) {
       return "yarn";
     }
-  } catch (e) { }
+  } catch (e) {}
   try {
     const packageLockPNPM = await vscode.workspace.fs.readFile(vscode.Uri.file(packageJsonPathPNPM));
     if (packageLockPNPM) {
       return "pnpm";
     }
-  } catch (e) { }
+  } catch (e) {}
 
   return "npm";
 };
@@ -205,11 +157,11 @@ export const createOrGetTerminal = () => {
 };
 
 export const runCommand = async ({ command, title, errorMessage, callback }: RunCommandOptions) => {
-  const workspacePath = await getWorkspacePath();
+  const rootDir = await getRootDir();
   await commandWithLoading(title, () => {
     // Run npm install command
     return new Promise((resolve) => {
-      exec(`${command}`, { cwd: workspacePath }, async (error, stdout, stderr) => {
+      exec(`${command}`, { cwd: rootDir?.fsPath }, async (error, stdout, stderr) => {
         if (error) {
           vscode.window.showErrorMessage(`Error: ${errorMessage}`);
           return resolve();
@@ -234,11 +186,11 @@ interface RunCommandWithPrompt {
   promptHandler: (process: ChildProcess, resolve: () => void) => Promise<void>;
 }
 export const runCommandWithPrompt = async ({ command, title, promptHandler }: RunCommandWithPrompt) => {
-  const workspacePath = await getWorkspacePath();
+  const rootDir = await getRootDir();
   await commandWithLoading(title, () => {
     // Run npm install command
     return new Promise(async (resolve) => {
-      const process = exec(`${command}`, { cwd: workspacePath });
+      const process = exec(`${command}`, { cwd: rootDir?.fsPath });
 
       await promptHandler(process, resolve);
     });
@@ -290,12 +242,12 @@ export const getUserInput = async (prompt: string, value?: string) => {
 
 export const getPickableOptions = async <T extends vscode.QuickPickItem>(
   options: T[],
-  config?: vscode.QuickPickOptions
+  config?: vscode.QuickPickOptions,
 ) => await vscode.window.showQuickPick<T>(options, config);
 
 export const getMultiplePickableOptions = async <T extends vscode.QuickPickItem>(
   options: T[],
-  config?: vscode.QuickPickOptions
+  config?: vscode.QuickPickOptions,
 ) => await vscode.window.showQuickPick<T>(options, { ...config, canPickMany: true });
 
 export const sanitizePath = (path: string) => (path.startsWith("/") ? path : `/${path}`);
