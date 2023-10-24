@@ -133,7 +133,7 @@ const updateTsconfig = async (rootDir: vscode.Uri, libLocation: string) => {
 
 export const initShadcnUi = async (uri: vscode.Uri) => {
   const workspacePath = await getWorkspacePath();
-  if(!workspacePath) {
+  if (!workspacePath) {
     return;
   }
   const rootDir = vscode.Uri.file(workspacePath);
@@ -160,12 +160,13 @@ export const initShadcnUi = async (uri: vscode.Uri) => {
   if (!commands.length) {
     return;
   }
+        console.log('called')
   await runCommandWithPrompt({
     command: "npx shadcn-ui@latest init",
     title: "Initializing shadcn/ui",
     promptHandler: async (process, resolve) => {
       process.stdout?.on("data", (data) => {
-        if(data.toString().includes("Would you like to use TypeScript (recommended)?") && commands[0].runTimes > 0) {
+        if (data.toString().includes("Would you like to use TypeScript (recommended)?") && commands[0].runTimes > 0) {
           process.stdin?.write(commands[0].command);
           commands[0].runTimes = commands[0].runTimes - 1;
         }
